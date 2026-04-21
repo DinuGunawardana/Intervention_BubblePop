@@ -25,6 +25,864 @@ body {
   margin-top: 10px;
 }
 
+#controls {
+  position: absolute;
+  bottom: 40px;
+  width: 100%;
+  text-align: center;
+}
+
+button {
+  padding: 12px 25px;
+  border-radius: 25px;
+  border: none;
+  background: rgba(255,255,255,0.2);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+canvas {
+  display: block;
+}
+</style>
+</head>
+
+<body>
+
+<div id="overlay">
+  <h1>Relax</h1>
+  <p id="instruction">Press Start</p>
+  <h2 id="timer">05:00</h2>
+</div>
+
+<div id="controls">
+  <button id="toggleBtn">Start</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+/* =========================
+   SETUP
+========================= */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+/* =========================
+   STATE
+========================= */
+let running = false;
+let animationId = null;
+let timerInterval = null;
+let bubbleSpawnTimer = null;
+
+let timeLeft = 300;
+let bubbles = [];
+let particles = [];
+
+const instruction = document.getElementById("instruction");
+const timerEl = document.getElementById("timer");
+const toggleBtn = document.getElementById("toggleBtn");
+
+// Calm spawn
+const SPAWN_INTERVAL = 800;
+const MAX_BUBBLES = 2; // was 5 → reduce clutter
+
+/* =========================
+   UI
+========================= */
+function updateUI() {
+  let min = Math.floor(timeLeft / 60);
+  let sec = timeLeft % 60;
+
+  timerEl.innerText =
+    `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+
+  if (!running) {
+    instruction.innerText = "Press Start";
+    return;
+  }
+
+  if (timeLeft > 270) instruction.innerText = "Settle in...";
+  else if (timeLeft > 90) instruction.innerText = "Gently tap bubbles";
+  else if (timeLeft > 30) instruction.innerText = "Slow down...";
+  else instruction.innerText = "Stay still...";
+}
+
+/* =========================
+   BUBBLE SYSTEM (3D DEPTH)
+========================= */
+function spawnBubble() {
+  bubbles.push({
+    // center zone
+    x: canvas.width * 0.3 + Math.random() * canvas.width * 0.4,
+    y: canvas.height * 0.3 + Math.random() * canvas.height * 0.4,
+
+    // start small (far away)
+    r: 20 + Math.random() * 10,
+
+    // depth growth
+    grow: 0.08 + Math.random() * 0.05,
+
+    // slight float
+    drift: Math.random() * 0.3 + 0.1,
+
+    opacity: 0.15 + Math.random() * 0.2
+  });
+}
+
+function startBubbleSpawn() {
+  bubbleSpawnTimer = setInterval(() => {
+    if (!running) return;
+
+    if (bubbles.length < MAX_BUBBLES) {
+      spawnBubble();
+    }
+
+  }, SPAWN_INTERVAL);
+}
+
+/* =========================
+   PARTICLES
+========================= */
+function spawnParticles(x, y) {
+  for (let i = 0; i < 12; i++) {
+    particles.push({
+      x, y,
+      dx: (Math.random() - 0.5) * 2,
+      dy: (Math.random() - 0.5) * 2,
+      life: 30
+    });
+  }
+}
+
+/* =========================
+   DRAW LOOP (SAFE LOOP)
+========================= */
+function animate() {
+  if (!running) return; // 🔥 HARD STOP FIX
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 🌊 subtle background wave
+  let wave = Math.sin(Date.now() * 0.001) * 4;
+  canvas.style.transform = `translateY(${wave}px)`;
+
+  // bubbles (3D effect)
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    let b = bubbles[i];
+
+    // grow (coming forward)
+    b.r += b.grow;
+
+    // slight upward drift
+    b.y -= b.drift;
+
+    // soft fade as they grow
+    b.opacity += 0.002;
+
+    // ✨ 3D radial gradient
+    let gradient = ctx.createRadialGradient(
+      b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.2,
+      b.x, b.y, b.r
+    );
+
+    gradient.addColorStop(0, `rgba(255,255,255,${b.opacity})`);
+    gradient.addColorStop(1, `rgba(173,216,230,0.1)`);
+
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // remove when too big (came "forward")
+    if (b.r > 120) {
+      bubbles.splice(i, 1);
+    }
+  }
+
+  // particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    let p = particles[i];
+
+    p.x += p.dx;
+    p.y += p.dy;
+    p.life--;
+
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.fillRect(p.x, p.y, 2, 2);
+
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  animationId = requestAnimationFrame(animate);
+}
+
+/* =========================
+   INTERACTION
+========================= */
+function handleTap(x, y) {
+  if (!running) return;
+
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    let b = bubbles[i];
+
+    let dx = b.x - x;
+    let dy = b.y - y;
+
+    if (Math.sqrt(dx * dx + dy * dy) < b.r) {
+      spawnParticles(b.x, b.y);
+      bubbles.splice(i, 1);
+
+      if (navigator.vibrate) navigator.vibrate(10);
+      break;
+    }
+  }
+}
+
+canvas.addEventListener("click", e => handleTap(e.clientX, e.clientY));
+canvas.addEventListener("touchstart", e => {
+  let t = e.touches[0];
+  handleTap(t.clientX, t.clientY);
+});
+
+/* =========================
+   SESSION CONTROL
+========================= */
+function startSession() {
+  if (running) return;
+
+  running = true;
+  timeLeft = 300;
+  bubbles = [];
+  particles = [];
+
+  toggleBtn.innerText = "Stop";
+  updateUI();
+
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    if (timeLeft <= 0) endSession();
+    updateUI();
+  }, 1000);
+
+  startBubbleSpawn();
+  animate(); // only one loop now
+}
+
+function stopSession() {
+  running = false;
+
+  clearInterval(timerInterval);
+  clearInterval(bubbleSpawnTimer);
+
+  cancelAnimationFrame(animationId);
+
+  bubbles = [];
+  particles = [];
+
+  toggleBtn.innerText = "Start";
+  instruction.innerText = "Session Stopped";
+}
+
+function endSession() {
+  running = false;
+
+  clearInterval(timerInterval);
+  clearInterval(bubbleSpawnTimer);
+
+  cancelAnimationFrame(animationId);
+
+  bubbles = [];
+  particles = [];
+
+  timerEl.innerText = "00:00";
+  instruction.innerText = "Session Complete";
+  toggleBtn.innerText = "Start";
+}
+
+/* =========================
+   TOGGLE
+========================= */
+toggleBtn.addEventListener("click", () => {
+  if (!running) startSession();
+  else stopSession();
+});
+
+/* INIT */
+updateUI();
+</script>
+
+<!-- <script>
+/* =========================
+   SETUP
+========================= */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+/* =========================
+   STATE
+========================= */
+let running = false;
+let timeLeft = 300;
+let timerInterval = null;
+let animationId = null;
+let bubbleSpawnTimer = null;
+
+let bubbles = [];
+let particles = [];
+
+const instruction = document.getElementById("instruction");
+const timerEl = document.getElementById("timer");
+const toggleBtn = document.getElementById("toggleBtn");
+
+// calm constant rate (based on your last phase)
+const SPAWN_INTERVAL = 650;
+
+// 🔥 KEY FIX → low density = no overlay
+const MAX_BUBBLES = 5;
+
+/* =========================
+   UI
+========================= */
+function updateUI() {
+  let min = Math.floor(timeLeft / 60);
+  let sec = timeLeft % 60;
+
+  timerEl.innerText =
+    `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+
+  if (!running) {
+    instruction.innerText = "Press Start";
+    return;
+  }
+
+  if (timeLeft > 270) instruction.innerText = "Settle in...";
+  else if (timeLeft > 90) instruction.innerText = "Gently tap bubbles";
+  else if (timeLeft > 30) instruction.innerText = "Slow down...";
+  else instruction.innerText = "Stay still...";
+}
+
+/* =========================
+   BUBBLE SYSTEM
+========================= */
+function spawnBubble() {
+  bubbles.push({
+    // 🎯 center-focused spawn
+    x: canvas.width * 0.2 + Math.random() * canvas.width * 0.6,
+
+    y: canvas.height + 60,
+
+    // nice large relaxing bubbles
+    r: Math.random() * 20 + 50,
+    // r: Math.random() * 30 + 60,
+
+    // slow natural float (IMPORTANT)
+    speed: Math.random() * 0.6 + 0.6,
+
+    opacity: 0.35
+  });
+}
+
+function startBubbleSpawn() {
+  bubbleSpawnTimer = setInterval(() => {
+    if (!running) return;
+
+    // 🔥 ONLY control density → no overlay
+    if (bubbles.length < MAX_BUBBLES) {
+      spawnBubble();
+    }
+
+  }, SPAWN_INTERVAL);
+}
+
+/* =========================
+   PARTICLES
+========================= */
+function spawnParticles(x, y) {
+  for (let i = 0; i < 10; i++) {
+    particles.push({
+      x, y,
+      dx: (Math.random() - 0.5) * 3,
+      dy: (Math.random() - 0.5) * 3,
+      life: 25
+    });
+  }
+}
+
+/* =========================
+   DRAW LOOP
+========================= */
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 🌊 gentle wave background
+  let wave = Math.sin(Date.now() * 0.0015) * 6;
+  canvas.style.transform = `translateY(${wave}px)`;
+
+  // bubbles
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    let b = bubbles[i];
+
+    // ✅ smooth upward motion
+    b.y -= b.speed;
+
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(173,216,230,${b.opacity})`;
+    ctx.fill();
+
+    // ✅ ONLY remove at top (natural lifecycle)
+    if (b.y + b.r < 0) {
+      bubbles.splice(i, 1);
+    }
+  }
+
+  // particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    let p = particles[i];
+
+    p.x += p.dx;
+    p.y += p.dy;
+    p.life--;
+
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.fillRect(p.x, p.y, 3, 3);
+
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  animationId = requestAnimationFrame(animate);
+}
+
+/* =========================
+   INTERACTION
+========================= */
+function handleTap(x, y) {
+  if (!running) return;
+
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    let b = bubbles[i];
+
+    let dx = b.x - x;
+    let dy = b.y - y;
+
+    if (Math.sqrt(dx * dx + dy * dy) < b.r) {
+      spawnParticles(b.x, b.y);
+      bubbles.splice(i, 1);
+
+      if (navigator.vibrate) navigator.vibrate(10);
+      break;
+    }
+  }
+}
+
+canvas.addEventListener("click", e => handleTap(e.clientX, e.clientY));
+canvas.addEventListener("touchstart", e => {
+  let t = e.touches[0];
+  handleTap(t.clientX, t.clientY);
+});
+
+/* =========================
+   SESSION CONTROL
+========================= */
+function startSession() {
+  if (running) return;
+
+  running = true;
+  timeLeft = 300;
+  bubbles = [];
+  particles = [];
+
+  toggleBtn.innerText = "Stop";
+  updateUI();
+
+  timerInterval = setInterval(() => {
+    timeLeft--;
+
+    if (timeLeft <= 0) {
+      endSession();
+      return;
+    }
+
+    updateUI();
+  }, 1000);
+
+  startBubbleSpawn();
+  animate();
+}
+
+function stopSession() {
+  running = false;
+
+  clearInterval(timerInterval);
+  clearInterval(bubbleSpawnTimer);
+  cancelAnimationFrame(animationId);
+
+  bubbles = [];
+  particles = [];
+
+  toggleBtn.innerText = "Start";
+  instruction.innerText = "Session Stopped";
+}
+
+function endSession() {
+  running = false;
+
+  clearInterval(timerInterval);
+  clearInterval(bubbleSpawnTimer);
+  cancelAnimationFrame(animationId);
+
+  bubbles = [];
+  particles = [];
+
+  timerEl.innerText = "00:00";
+  instruction.innerText = "Session Complete";
+  toggleBtn.innerText = "Start";
+}
+
+/* =========================
+   TOGGLE
+========================= */
+toggleBtn.addEventListener("click", () => {
+  if (!running) startSession();
+  else stopSession();
+});
+
+/* INIT */
+updateUI();
+</script> -->
+
+<!-- <script>
+/* =========================
+   SETUP
+========================= */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+/* =========================
+   STATE
+========================= */
+let running = false;
+let timeLeft = 300;
+let timerInterval = null;
+let animationId = null;
+let bubbleSpawnTimer = null;
+
+let bubbles = [];
+let particles = [];
+
+const instruction = document.getElementById("instruction");
+const timerEl = document.getElementById("timer");
+const toggleBtn = document.getElementById("toggleBtn");
+
+// calm constant rate (your last phase feel)
+const SPAWN_INTERVAL = 650;
+
+// limit total bubbles (prevents overlay clutter)
+// const MAX_BUBBLES = 5;
+const MAX_BUBBLES = 3; // was 5 → reduce clutter
+
+/* =========================
+   PHASE SYSTEM
+========================= */
+function getPhase() {
+  if (timeLeft > 270) return "ARRIVAL";
+  if (timeLeft > 90) return "ENGAGE";
+  if (timeLeft > 30) return "DEEP";
+  return "EXIT";
+}
+
+/* =========================
+   UI
+========================= */
+function updateUI() {
+  let min = Math.floor(timeLeft / 60);
+  let sec = timeLeft % 60;
+
+  timerEl.innerText =
+    `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+
+  if (!running) {
+    instruction.innerText = "Press Start";
+    return;
+  }
+
+  if (timeLeft > 270) instruction.innerText = "Settle in...";
+  else if (timeLeft > 90) instruction.innerText = "Gently tap bubbles";
+  else if (timeLeft > 30) instruction.innerText = "Slow down...";
+  else instruction.innerText = "Stay still...";
+}
+
+/* =========================
+   BUBBLE SYSTEM
+========================= */
+function spawnBubble() {
+  bubbles.push({
+    x: Math.random() * canvas.width,
+    y: canvas.height + 60,
+    // r: Math.random() * 30 + 60,
+    r: Math.random() * 20 + 50, // slightly smaller
+    // speed: Math.random() * 0.4 + 0.4,
+    speed: Math.random() * 0.6 + 0.6, // was 0.4–0.8 → now faster upward
+    opacity: 0.4
+  });
+}
+
+function spawnParticles(x, y) {
+  for (let i = 0; i < 10; i++) {
+    particles.push({
+      x, y,
+      dx: (Math.random() - 0.5) * 3,
+      dy: (Math.random() - 0.5) * 3,
+      life: 25
+    });
+  }
+}
+
+/* =========================
+   DRAW LOOP
+========================= */
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 🌊 wave animation
+  let wave = Math.sin(Date.now() * 0.0015) * 6;
+  canvas.style.transform = `translateY(${wave}px)`;
+
+  // bubbles
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    let b = bubbles[i];
+
+    // b.y -= b.speed;
+    b.y -= b.speed;
+
+    // fade out gradually
+    b.opacity -= 0.0025;
+
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(173,216,230,${b.opacity})`;
+    ctx.fill();
+
+    // if (b.y + b.r < 0) bubbles.splice(i, 1);
+    if (b.y < canvas.height * 0.3 || b.opacity <= 0) {
+        bubbles.splice(i, 1);
+    }
+  }
+
+  // particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    let p = particles[i];
+
+    p.x += p.dx;
+    p.y += p.dy;
+    p.life--;
+
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.fillRect(p.x, p.y, 3, 3);
+
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  // controlled spawn
+//   if (running) {
+//     let phase = getPhase();
+
+//     if (phase === "ARRIVAL" && bubbles.length < 6) spawnBubble();
+//     if (phase === "ENGAGE" && bubbles.length < 10) spawnBubble();
+//     if (phase === "DEEP" && bubbles.length < 4) spawnBubble();
+//     if (phase === "EXIT" && bubbles.length < 2) spawnBubble();
+//   }
+
+  animationId = requestAnimationFrame(animate);
+}
+
+function spawnBubble() {
+  bubbles.push({
+    // 🎯 keep bubbles in middle 60% of screen
+    x: canvas.width * 0.2 + Math.random() * canvas.width * 0.6,
+    
+    y: canvas.height + 60,
+
+    r: Math.random() * 30 + 60,
+    speed: Math.random() * 0.4 + 0.4,
+    opacity: 0.35 // slightly softer
+  });
+}
+
+function startBubbleSpawn() {
+  bubbleSpawnTimer = setInterval(() => {
+
+    if (!running) return;
+
+    // 🧘 prevent overlay clutter
+    if (bubbles.length < MAX_BUBBLES) {
+      spawnBubble();
+    }
+
+  }, SPAWN_INTERVAL);
+}
+
+/* =========================
+   INTERACTION
+========================= */
+function handleTap(x, y) {
+  if (!running) return;
+
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    let b = bubbles[i];
+
+    let dx = b.x - x;
+    let dy = b.y - y;
+
+    if (Math.sqrt(dx * dx + dy * dy) < b.r) {
+      spawnParticles(b.x, b.y);
+      bubbles.splice(i, 1);
+
+      if (navigator.vibrate) navigator.vibrate(10);
+      break;
+    }
+  }
+}
+
+canvas.addEventListener("click", e => handleTap(e.clientX, e.clientY));
+canvas.addEventListener("touchstart", e => {
+  let t = e.touches[0];
+  handleTap(t.clientX, t.clientY);
+});
+
+/* =========================
+   SESSION CONTROL
+========================= */
+function startSession() {
+  if (running) return;
+
+  running = true;
+  timeLeft = 300;
+  bubbles = [];
+  particles = [];
+
+  toggleBtn.innerText = "Stop";
+  updateUI();
+
+  timerInterval = setInterval(() => {
+    timeLeft--;
+
+    if (timeLeft <= 0) {
+      endSession();
+      return;
+    }
+
+    updateUI();
+  }, 1000);
+
+  startBubbleSpawn(); // ✅ important
+
+  animate();
+}
+
+function stopSession() {
+  running = false;
+
+  clearInterval(timerInterval);
+  clearInterval(bubbleSpawnTimer); // ✅ FIXED
+
+  cancelAnimationFrame(animationId);
+
+  bubbles = [];
+  particles = [];
+
+  toggleBtn.innerText = "Start";
+  instruction.innerText = "Session Stopped";
+}
+
+function endSession() {
+  running = false;
+
+  clearInterval(timerInterval);
+  clearInterval(bubbleSpawnTimer); // ✅ FIXED
+
+  cancelAnimationFrame(animationId);
+
+  bubbles = [];
+  particles = [];
+
+  timerEl.innerText = "00:00";
+  instruction.innerText = "Session Complete";
+  toggleBtn.innerText = "Start";
+}
+
+/* =========================
+   TOGGLE
+========================= */
+toggleBtn.addEventListener("click", () => {
+  if (!running) startSession();
+  else stopSession();
+});
+
+/* INIT */
+updateUI();
+</script> -->
+
+</body>
+</html>
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Calm Bubble Intervention</title>
+
+<style>
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: 'Segoe UI', sans-serif;
+  background: linear-gradient(120deg, #0f2027, #2c5364, #4ca1af);
+}
+
+#overlay {
+  position: absolute;
+  top: 40px;
+  width: 100%;
+  text-align: center;
+  color: rgba(255,255,255,0.9);
+}
+
+#timer {
+  font-size: 30px;
+  margin-top: 10px;
+}
+
+#controls {
+  position: absolute;
+  bottom: 40px;
+  width: 100%;
+  text-align: center;
+}
+
+button {
+  padding: 12px 25px;
+  border-radius: 25px;
+  border: none;
+  background: rgba(255,255,255,0.2);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+}
+
 canvas {
   display: block;
 }
@@ -39,9 +897,167 @@ canvas {
   <h2 id="timer">05:00</h2>
 </div>
 
+<div id="controls">
+  <button id="toggleBtn">Start</button>
+</div>
+
 <canvas id="canvas"></canvas>
 
 <script>
+/* =========================
+   CANVAS SETUP
+========================= */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+/* =========================
+   SESSION + TIMER
+========================= */
+let time = 300;
+
+const instruction = document.getElementById("instruction");
+const timerEl = document.getElementById("timer");
+
+function updateUI() {
+  let min = Math.floor(time / 60);
+  let sec = time % 60;
+
+  timerEl.innerText =
+    `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+
+  if (time > 270) instruction.innerText = "Settle in... breathe slowly";
+  else if (time > 90) instruction.innerText = "Gently tap the bubble";
+  else if (time > 30) instruction.innerText = "Slow down... relax deeper";
+  else instruction.innerText = "Stay still... notice your breath";
+}
+
+setInterval(() => {
+  time--;
+  updateUI();
+
+  if (time <= 0) {
+    instruction.innerText = "Session Complete";
+  }
+}, 1000);
+
+/* =========================
+   BUBBLE SYSTEM (FLOAT UP)
+========================= */
+let bubble = null;
+
+function createBubble() {
+  bubble = {
+    x: Math.random() * (canvas.width - 100) + 50, // avoid edges
+    y: canvas.height + 80, // start BELOW screen
+    radius: 80, // bigger bubble
+    opacity: 0.45,
+    speed: 0.6, // slow float
+    dissolving: false
+  };
+}
+
+createBubble();
+
+/* =========================
+   DRAW LOOP
+========================= */
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (bubble) {
+
+    // FLOAT UP
+    if (!bubble.dissolving) {
+      bubble.y -= bubble.speed;
+    }
+
+    // DRAW
+    ctx.beginPath();
+    ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(173,216,230,${bubble.opacity})`;
+    ctx.fill();
+
+    // DISSOLVE
+    if (bubble.dissolving) {
+      bubble.opacity -= 0.025;
+      bubble.radius += 1.5;
+
+      if (bubble.opacity <= 0) {
+        bubble = null;
+
+        // spawn next after short delay
+        setTimeout(createBubble, 700);
+      }
+    }
+
+    // IF MISSED (goes off screen)
+    if (bubble && bubble.y + bubble.radius < 0) {
+      bubble = null;
+      setTimeout(createBubble, 700);
+    }
+  }
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+
+/* =========================
+   INTERACTION
+========================= */
+function handleTap(x, y) {
+  if (!bubble || bubble.dissolving) return;
+
+  const dx = bubble.x - x;
+  const dy = bubble.y - y;
+
+  if (Math.sqrt(dx * dx + dy * dy) < bubble.radius) {
+    bubble.dissolving = true;
+
+    if (navigator.vibrate) navigator.vibrate(10);
+  }
+}
+
+// mobile
+canvas.addEventListener("touchstart", (e) => {
+  const t = e.touches[0];
+  handleTap(t.clientX, t.clientY);
+});
+
+// desktop
+canvas.addEventListener("click", (e) => {
+  handleTap(e.clientX, e.clientY);
+});
+
+/* =========================
+   BREATHING SYNC
+========================= */
+let breath = 0;
+
+setInterval(() => {
+  breath += 0.04;
+  let scale = 1 + Math.sin(breath) * 0.015;
+  document.body.style.transform = `scale(${scale})`;
+}, 100);
+
+/* =========================
+   TOGGLE BUTTON
+========================= */
+toggleBtn.addEventListener("click", () => {
+  if (!running) startSession();
+  else stopSession();
+});
+
+/* =========================
+   INIT
+========================= */
+updateUI();
+</script> -->
+
+<!-- <script>
 /* =========================
    CANVAS SETUP
 ========================= */
@@ -173,10 +1189,10 @@ setInterval(() => {
    INIT
 ========================= */
 updateUI();
-</script>
+</script> -->
 
-</body>
-</html>
+<!-- </body>
+</html> -->
 
 <!-- <!DOCTYPE html>
 <html lang="en">
