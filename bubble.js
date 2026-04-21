@@ -19,8 +19,13 @@ class Bubble {
     ctx.fill();
   }
 
+//   dissolve() {
+//     this.opacity -= 0.05;
+//     this.radius += 0.3;
+//   }
+
   dissolve() {
-    this.opacity -= 0.05;
-    this.radius += 0.3;
+    this.opacity -= 0.08;
+    this.radius += 0.5;
   }
 }

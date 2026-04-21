@@ -1,6 +1,186 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta charset="UTF-8">
+<title>Calm Bubble Intervention</title>
+
+<style>
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: 'Segoe UI', sans-serif;
+  background: linear-gradient(120deg, #0f2027, #2c5364, #4ca1af);
+}
+
+#overlay {
+  position: absolute;
+  top: 40px;
+  width: 100%;
+  text-align: center;
+  color: rgba(255,255,255,0.9);
+}
+
+#timer {
+  font-size: 30px;
+  margin-top: 10px;
+}
+
+canvas {
+  display: block;
+}
+</style>
+</head>
+
+<body>
+
+<div id="overlay">
+  <h1>Relax</h1>
+  <p id="instruction">Preparing...</p>
+  <h2 id="timer">05:00</h2>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+/* =========================
+   CANVAS SETUP
+========================= */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+/* =========================
+   SESSION + TIMER
+========================= */
+let time = 300; // 5 min
+
+const instruction = document.getElementById("instruction");
+const timerEl = document.getElementById("timer");
+
+function updateUI() {
+  // Update timer
+  let min = Math.floor(time / 60);
+  let sec = time % 60;
+  timerEl.innerText =
+    `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+
+  // Update phase text
+  if (time > 270) instruction.innerText = "Settle in... breathe slowly";
+  else if (time > 90) instruction.innerText = "Gently tap the bubble";
+  else if (time > 30) instruction.innerText = "Slow down... relax deeper";
+  else instruction.innerText = "Stay still... notice your breath";
+}
+
+setInterval(() => {
+  time--;
+  updateUI();
+
+  if (time <= 0) {
+    instruction.innerText = "Session Complete";
+  }
+}, 1000);
+
+/* =========================
+   BUBBLE (SINGLE CONTROLLED)
+========================= */
+let bubble = null;
+
+function createBubble() {
+  bubble = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    radius: 70, // BIGGER bubble
+    opacity: 0.5,
+    dissolving: false
+  };
+}
+
+createBubble();
+
+/* =========================
+   DRAW LOOP
+========================= */
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (bubble) {
+    ctx.beginPath();
+    ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(173,216,230,${bubble.opacity})`;
+    ctx.fill();
+
+    // dissolve animation
+    if (bubble.dissolving) {
+      bubble.opacity -= 0.03;
+      bubble.radius += 1.2;
+
+      if (bubble.opacity <= 0) {
+        bubble = null;
+
+        // spawn next bubble AFTER dissolve
+        setTimeout(createBubble, 500);
+      }
+    }
+  }
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+
+/* =========================
+   INTERACTION
+========================= */
+function handleTap(x, y) {
+  if (!bubble || bubble.dissolving) return;
+
+  const dx = bubble.x - x;
+  const dy = bubble.y - y;
+
+  if (Math.sqrt(dx * dx + dy * dy) < bubble.radius) {
+    bubble.dissolving = true;
+
+    // subtle vibration
+    if (navigator.vibrate) navigator.vibrate(10);
+  }
+}
+
+// mobile
+canvas.addEventListener("touchstart", (e) => {
+  const t = e.touches[0];
+  handleTap(t.clientX, t.clientY);
+});
+
+// desktop
+canvas.addEventListener("click", (e) => {
+  handleTap(e.clientX, e.clientY);
+});
+
+/* =========================
+   BREATHING SYNC (SUBTLE)
+========================= */
+let breath = 0;
+
+setInterval(() => {
+  breath += 0.05;
+  let scale = 1 + Math.sin(breath) * 0.015;
+  document.body.style.transform = `scale(${scale})`;
+}, 100);
+
+/* =========================
+   INIT
+========================= */
+updateUI();
+</script>
+
+</body>
+</html>
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
   <meta charset="UTF-8" />
   <title>Calm Bubble Intervention</title>
   <link rel="stylesheet" href="styles.css" />
@@ -9,7 +189,8 @@
 
 <div id="overlay">
   <h1>Relax</h1>
-  <p id="instruction">Prepare to begin</p>
+  <p id="instruction">Preparing...</p>
+  <h2 id="timer">05:00</h2>
 </div>
 
 <canvas id="canvas"></canvas>
@@ -20,4 +201,4 @@
 <script src="app.js"></script>
 
 </body>
-</html>
+</html> -->

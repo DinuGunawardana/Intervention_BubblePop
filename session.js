@@ -1,28 +1,32 @@
-const SESSION_DURATION = 300000;
+const SESSION_DURATION = 300; // seconds
 
-const phases = [
-  { name: "ARRIVAL", duration: 30000 },
-  { name: "ENGAGE", duration: 180000 },
-  { name: "DEEP", duration: 60000 },
-  { name: "EXIT", duration: 30000 }
-];
+let remainingTime = SESSION_DURATION;
 
-let currentPhase = 0;
-let phaseStartTime = Date.now();
+function startCountdown() {
+  const timerEl = document.getElementById("timer");
 
-function getCurrentPhase() {
-  return phases[currentPhase].name;
-}
+  const interval = setInterval(() => {
+    remainingTime--;
 
-function updatePhase() {
-  const now = Date.now();
+    let min = Math.floor(remainingTime / 60);
+    let sec = remainingTime % 60;
 
-  if (now - phaseStartTime > phases[currentPhase].duration) {
-    currentPhase++;
-    phaseStartTime = now;
+    timerEl.innerText =
+      `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 
-    if (currentPhase >= phases.length) {
+    updatePhaseByTime();
+
+    if (remainingTime <= 0) {
+      clearInterval(interval);
       endSession();
     }
-  }
+  }, 1000);
+}
+
+// Phase control using time (more reliable)
+function getCurrentPhase() {
+  if (remainingTime > 270) return "ARRIVAL";
+  if (remainingTime > 90) return "ENGAGE";
+  if (remainingTime > 30) return "DEEP";
+  return "EXIT";
 }
