@@ -1,0 +1,25 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: 'Segoe UI', sans-serif;
+  background: linear-gradient(120deg, #0f2027, #2c5364, #4ca1af);
+  animation: gradientShift 20s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+#overlay {
+  position: absolute;
+  top: 40px;
+  width: 100%;
+  text-align: center;
+  color: rgba(255,255,255,0.85);
+}
+
+canvas {
+  display: block;
+}
